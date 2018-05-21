@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#ifndef __MINGW32__
 #pragma warning(push)
 
 #pragma warning(disable : 4061) // enum is not explicitly handled by a case label
@@ -9,12 +10,15 @@
 #pragma warning(disable : 4464) // relative include path contains
 #pragma warning(disable : 4668) // is not defined as a preprocessor macro
 #pragma warning(disable : 6313) // Incorrect operator
+#endif                          // __MINGW32__
 
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
+#ifndef __MINGW32__
 #pragma warning(pop)
+#endif // __MINGW32__
 
 // if only there was a standard library function for this
 template <size_t Len>
@@ -42,6 +46,8 @@ size_t JsonWriteRichPresenceObj(char* dest,
                                 int pid,
                                 const DiscordRichPresence* presence);
 size_t JsonWriteSubscribeCommand(char* dest, size_t maxLen, int nonce, const char* evtName);
+
+size_t JsonWriteUnsubscribeCommand(char* dest, size_t maxLen, int nonce, const char* evtName);
 
 size_t JsonWriteJoinReply(char* dest, size_t maxLen, const char* userId, int reply, int nonce);
 

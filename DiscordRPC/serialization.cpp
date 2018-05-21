@@ -1,6 +1,6 @@
 #include "serialization.h"
 #include "connection.h"
-#include "discord-rpc.h"
+#include "discord_rpc.h"
 
 template <typename T>
 void NumberToString(char* dest, T number)
@@ -102,7 +102,7 @@ size_t JsonWriteRichPresenceObj(char* dest,
             WriteKey(writer, "pid");
             writer.Int(pid);
 
-            {
+            if (presence != nullptr) {
                 WriteObject activity(writer, "activity");
 
                 WriteOptionalString(writer, "state", presence->state);
@@ -137,12 +137,10 @@ size_t JsonWriteRichPresenceObj(char* dest,
                     presence->partyMax) {
                     WriteObject party(writer, "party");
                     WriteOptionalString(writer, "id", presence->partyId);
-                    if (presence->partySize) {
+                    if (presence->partySize && presence->partyMax) {
                         WriteArray size(writer, "size");
                         writer.Int(presence->partySize);
-                        if (0 < presence->partyMax) {
-                            writer.Int(presence->partyMax);
-                        }
+                        writer.Int(presence->partyMax);
                     }
                 }
 
@@ -190,6 +188,25 @@ size_t JsonWriteSubscribeCommand(char* dest, size_t maxLen, int nonce, const cha
 
         WriteKey(writer, "cmd");
         writer.String("SUBSCRIBE");
+
+        WriteKey(writer, "evt");
+        writer.String(evtName);
+    }
+
+    return writer.Size();
+}
+
+size_t JsonWriteUnsubscribeCommand(char* dest, size_t maxLen, int nonce, const char* evtName)
+{
+    JsonWriter writer(dest, maxLen);
+
+    {
+        WriteObject obj(writer);
+
+        JsonWriteNonce(writer, nonce);
+
+        WriteKey(writer, "cmd");
+        writer.String("UNSUBSCRIBE");
 
         WriteKey(writer, "evt");
         writer.String(evtName);

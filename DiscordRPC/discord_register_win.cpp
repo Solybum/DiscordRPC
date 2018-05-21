@@ -1,17 +1,5 @@
-/*
- * MinGW defaults to WINNT 5.1 (aka XP), however some of functions used here
- * require WINNT >= 6.0 APIs, which are only visible when WINVER and
- * _WIN32_WINNT defines are set properly before including any system headers.
- * Such API is e.g. RegSetKeyValueW.
- */
-#ifdef __MINGW32__
-// 0x0600 == vista
-#define WINVER 0x0600
-#define _WIN32_WINNT 0x0600
-#endif // __MINGW32__
-
-#include "discord-rpc.h"
-#include <stdio.h>
+#include "discord_rpc.h"
+#include "discord_register.h"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMCX
@@ -19,9 +7,66 @@
 #define NOIME
 #include <windows.h>
 #include <psapi.h>
-#include <strsafe.h>
+#include <cwchar>
+#include <cstdio>
 
-void Discord_RegisterW(const wchar_t* applicationId, const wchar_t* command)
+/**
+ * Updated fixes for MinGW and WinXP
+ * This block is written the way it does not involve changing the rest of the code
+ * Checked to be compiling
+ * 1) strsafe.h belongs to Windows SDK and cannot be added to MinGW
+ * #include guarded, functions redirected to <string.h> substitutes
+ * 2) RegSetKeyValueW and LSTATUS are not declared in <winreg.h>
+ * The entire function is rewritten
+ */
+#ifdef __MINGW32__
+/// strsafe.h fixes
+static HRESULT StringCbPrintfW(LPWSTR pszDest, size_t cbDest, LPCWSTR pszFormat, ...)
+{
+    HRESULT ret;
+    va_list va;
+    va_start(va, pszFormat);
+    cbDest /= 2; // Size is divided by 2 to convert from bytes to wide characters - causes segfault
+                 // othervise
+    ret = vsnwprintf(pszDest, cbDest, pszFormat, va);
+    pszDest[cbDest - 1] = 0; // Terminate the string in case a buffer overflow; -1 will be returned
+    va_end(va);
+    return ret;
+}
+#else
+#include <strsafe.h>
+#endif // __MINGW32__
+
+/// winreg.h fixes
+#ifndef LSTATUS
+#define LSTATUS LONG
+#endif
+#ifdef RegSetKeyValueW
+#undefine RegSetKeyValueW
+#endif
+#define RegSetKeyValueW regset
+static LSTATUS regset(HKEY hkey,
+                      LPCWSTR subkey,
+                      LPCWSTR name,
+                      DWORD type,
+                      const void* data,
+                      DWORD len)
+{
+    HKEY htkey = hkey, hsubkey = nullptr;
+    LSTATUS ret;
+    if (subkey && subkey[0]) {
+        if ((ret = RegCreateKeyExW(hkey, subkey, 0, 0, 0, KEY_ALL_ACCESS, 0, &hsubkey, 0)) !=
+            ERROR_SUCCESS)
+            return ret;
+        htkey = hsubkey;
+    }
+    ret = RegSetValueExW(htkey, name, 0, type, (const BYTE*)data, len);
+    if (hsubkey && hsubkey != hkey)
+        RegCloseKey(hsubkey);
+    return ret;
+}
+
+static void Discord_RegisterW(const wchar_t* applicationId, const wchar_t* command)
 {
     // https://msdn.microsoft.com/en-us/library/aa767914(v=vs.85).aspx
     // we want to register games so we can run them as discord-<appid>://
@@ -35,7 +80,8 @@ void Discord_RegisterW(const wchar_t* applicationId, const wchar_t* command)
         StringCbPrintfW(openCommand, sizeof(openCommand), L"%s", command);
     }
     else {
-        StringCbCopyW(openCommand, sizeof(openCommand), exeFilePath);
+        // StringCbCopyW(openCommand, sizeof(openCommand), exeFilePath);
+        StringCbPrintfW(openCommand, sizeof(openCommand), L"%s", exeFilePath);
     }
 
     wchar_t protocolName[64];
@@ -48,9 +94,8 @@ void Discord_RegisterW(const wchar_t* applicationId, const wchar_t* command)
     wchar_t keyName[256];
     StringCbPrintfW(keyName, sizeof(keyName), L"Software\\Classes\\%s", protocolName);
     HKEY key;
-    //auto status =
-    //  RegCreateKeyExW(HKEY_CURRENT_USER, keyName, 0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr);
-    auto status = RegOpenKeyExW(HKEY_CURRENT_USER, keyName, 0, KEY_WRITE, &key);
+    auto status =
+      RegCreateKeyExW(HKEY_CURRENT_USER, keyName, 0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr);
     if (status != ERROR_SUCCESS) {
         fprintf(stderr, "Error creating key\n");
         return;
@@ -58,42 +103,34 @@ void Discord_RegisterW(const wchar_t* applicationId, const wchar_t* command)
     DWORD len;
     LSTATUS result;
     len = (DWORD)lstrlenW(protocolDescription) + 1;
-    //result =
-    //  RegSetKeyValueW(key, nullptr, nullptr, REG_SZ, protocolDescription, len * sizeof(wchar_t));
-    result = 
-        RegSetValueExW(key, NULL, NULL, REG_SZ, (LPBYTE)(&protocolDescription), len * sizeof(wchar_t));
+    result =
+      RegSetKeyValueW(key, nullptr, nullptr, REG_SZ, protocolDescription, len * sizeof(wchar_t));
     if (FAILED(result)) {
         fprintf(stderr, "Error writing description\n");
     }
 
     len = (DWORD)lstrlenW(protocolDescription) + 1;
-    //result = RegSetKeyValueW(key, nullptr, L"URL Protocol", REG_SZ, &urlProtocol, sizeof(wchar_t));
-    result =
-        RegSetValueExW(key, L"URL Protocol", NULL, REG_SZ, (LPBYTE)(&urlProtocol), sizeof(wchar_t));
+    result = RegSetKeyValueW(key, nullptr, L"URL Protocol", REG_SZ, &urlProtocol, sizeof(wchar_t));
     if (FAILED(result)) {
         fprintf(stderr, "Error writing description\n");
     }
 
-    //result = RegSetKeyValueW(
-    //  key, L"DefaultIcon", nullptr, REG_SZ, exeFilePath, (exeLen + 1) * sizeof(wchar_t));
-    result =
-        RegSetValueExW(key, L"DefaultIcon", NULL, REG_SZ, (LPBYTE)(&exeFilePath), (exeLen + 1) * sizeof(wchar_t));
+    result = RegSetKeyValueW(
+      key, L"DefaultIcon", nullptr, REG_SZ, exeFilePath, (exeLen + 1) * sizeof(wchar_t));
     if (FAILED(result)) {
         fprintf(stderr, "Error writing icon\n");
     }
 
     len = (DWORD)lstrlenW(openCommand) + 1;
-    //result = RegSetKeyValueW(
-    //  key, L"shell\\open\\command", nullptr, REG_SZ, openCommand, len * sizeof(wchar_t));
-    result =
-        RegSetValueExW(key, L"shell\\open\\command", NULL, REG_SZ, (LPBYTE)(&openCommand), len * sizeof(wchar_t));
+    result = RegSetKeyValueW(
+      key, L"shell\\open\\command", nullptr, REG_SZ, openCommand, len * sizeof(wchar_t));
     if (FAILED(result)) {
         fprintf(stderr, "Error writing command\n");
     }
     RegCloseKey(key);
 }
 
-extern "C" void Discord_Register(const char* applicationId, const char* command)
+extern "C" DISCORD_EXPORT void Discord_Register(const char* applicationId, const char* command)
 {
     wchar_t appId[32];
     MultiByteToWideChar(CP_UTF8, 0, applicationId, -1, appId, 32);
@@ -109,7 +146,8 @@ extern "C" void Discord_Register(const char* applicationId, const char* command)
     Discord_RegisterW(appId, wcommand);
 }
 
-extern "C" void Discord_RegisterSteamGame(const char* applicationId, const char* steamId)
+extern "C" DISCORD_EXPORT void Discord_RegisterSteamGame(const char* applicationId,
+                                                         const char* steamId)
 {
     wchar_t appId[32];
     MultiByteToWideChar(CP_UTF8, 0, applicationId, -1, appId, 32);
