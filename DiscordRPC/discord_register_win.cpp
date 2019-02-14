@@ -94,8 +94,9 @@ static void Discord_RegisterW(const wchar_t* applicationId, const wchar_t* comma
     wchar_t keyName[256];
     StringCbPrintfW(keyName, sizeof(keyName), L"Software\\Classes\\%s", protocolName);
     HKEY key;
-    auto status =
-      RegCreateKeyExW(HKEY_CURRENT_USER, keyName, 0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr);
+    //auto status =
+    //  RegCreateKeyExW(HKEY_CURRENT_USER, keyName, 0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr);
+    auto status = RegOpenKeyExW(HKEY_CURRENT_USER, keyName, 0, KEY_WRITE, &key);
     if (status != ERROR_SUCCESS) {
         fprintf(stderr, "Error creating key\n");
         return;
@@ -103,27 +104,33 @@ static void Discord_RegisterW(const wchar_t* applicationId, const wchar_t* comma
     DWORD len;
     LSTATUS result;
     len = (DWORD)lstrlenW(protocolDescription) + 1;
+    //result =
+    //  RegSetKeyValueW(key, nullptr, nullptr, REG_SZ, protocolDescription, len * sizeof(wchar_t));
     result =
-      RegSetKeyValueW(key, nullptr, nullptr, REG_SZ, protocolDescription, len * sizeof(wchar_t));
+        RegSetValueExW(key, NULL, NULL, REG_SZ, (LPBYTE)(&protocolDescription), len * sizeof(wchar_t));
     if (FAILED(result)) {
         fprintf(stderr, "Error writing description\n");
     }
 
     len = (DWORD)lstrlenW(protocolDescription) + 1;
-    result = RegSetKeyValueW(key, nullptr, L"URL Protocol", REG_SZ, &urlProtocol, sizeof(wchar_t));
+    //result = RegSetKeyValueW(key, nullptr, L"URL Protocol", REG_SZ, &urlProtocol, sizeof(wchar_t));
+    result = RegSetValueExW(key, L"URL Protocol", NULL, REG_SZ, (LPBYTE)(&urlProtocol), sizeof(wchar_t));
     if (FAILED(result)) {
         fprintf(stderr, "Error writing description\n");
     }
 
-    result = RegSetKeyValueW(
-      key, L"DefaultIcon", nullptr, REG_SZ, exeFilePath, (exeLen + 1) * sizeof(wchar_t));
+    //result = RegSetKeyValueW(
+    //  key, L"DefaultIcon", nullptr, REG_SZ, exeFilePath, (exeLen + 1) * sizeof(wchar_t));
+    result =
+        RegSetValueExW(key, L"DefaultIcon", NULL, REG_SZ, (LPBYTE)(&exeFilePath), (exeLen + 1) * sizeof(wchar_t));
     if (FAILED(result)) {
         fprintf(stderr, "Error writing icon\n");
     }
 
     len = (DWORD)lstrlenW(openCommand) + 1;
-    result = RegSetKeyValueW(
-      key, L"shell\\open\\command", nullptr, REG_SZ, openCommand, len * sizeof(wchar_t));
+    //result = RegSetKeyValueW(
+    //  key, L"shell\\open\\command", nullptr, REG_SZ, openCommand, len * sizeof(wchar_t));
+    result = RegSetValueExW(key, L"shell\\open\\command", NULL, REG_SZ, (LPBYTE)(&openCommand), len * sizeof(wchar_t));
     if (FAILED(result)) {
         fprintf(stderr, "Error writing command\n");
     }
