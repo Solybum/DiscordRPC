@@ -24,7 +24,7 @@ struct QueuedMessage
     size_t length;
     char buffer[MaxMessageSize];
 
-    void Copy(const QueuedMessage& other)
+    void Copy(const QueuedMessage &other)
     {
         length = other.length;
         if (length)
@@ -49,7 +49,7 @@ struct User
     // Rounded way up because I'm paranoid about games breaking from future changes in these sizes
 };
 
-static RpcConnection* Connection{ nullptr };
+static RpcConnection *Connection{ nullptr };
 static DiscordEventHandlers QueuedHandlers{};
 static DiscordEventHandlers Handlers{};
 static std::atomic_bool WasJustConnected{ false };
@@ -93,16 +93,16 @@ public:
     {
         keepRunning.store(true);
         ioThread = std::thread([&]()
-        {
-            const std::chrono::duration<int64_t, std::milli> maxWait{ 500LL };
-            Discord_UpdateConnection();
-            while (keepRunning.load())
             {
-                std::unique_lock<std::mutex> lock(waitForIOMutex);
-                waitForIOActivity.wait_for(lock, maxWait);
+                const std::chrono::duration<int64_t, std::milli> maxWait{ 500LL };
                 Discord_UpdateConnection();
-            }
-        });
+                while (keepRunning.load())
+                {
+                    std::unique_lock<std::mutex> lock(waitForIOMutex);
+                    waitForIOActivity.wait_for(lock, maxWait);
+                    Discord_UpdateConnection();
+                }
+            });
     }
 
     void Notify() { waitForIOActivity.notify_all(); }
@@ -128,7 +128,7 @@ public:
     void Notify() {}
 };
 #endif // DISCORD_DISABLE_IO_THREAD
-static IoThreadHolder* IoThread{ nullptr };
+static IoThreadHolder *IoThread{ nullptr };
 
 static void UpdateReconnectTime()
 {
@@ -168,8 +168,8 @@ static void Discord_UpdateConnection(void)
                 break;
             }
 
-            const char* evtName = GetStrMember(&message, "evt");
-            const char* nonce = GetStrMember(&message, "nonce");
+            const char *evtName = GetStrMember(&message, "evt");
+            const char *nonce = GetStrMember(&message, "nonce");
 
             if (nonce)
             {
@@ -275,7 +275,7 @@ static void SignalIOActivity()
     }
 }
 
-static bool RegisterForEvent(const char* evtName)
+static bool RegisterForEvent(const char *evtName)
 {
     auto qmessage = SendQueue.GetNextAddMessage();
     if (qmessage)
@@ -289,7 +289,7 @@ static bool RegisterForEvent(const char* evtName)
     return false;
 }
 
-static bool DeregisterForEvent(const char* evtName)
+static bool DeregisterForEvent(const char *evtName)
 {
     auto qmessage = SendQueue.GetNextAddMessage();
     if (qmessage)
@@ -303,10 +303,10 @@ static bool DeregisterForEvent(const char* evtName)
     return false;
 }
 
-extern "C" DISCORD_EXPORT void Discord_Initialize(const char* applicationId,
-    DiscordEventHandlers* handlers,
+extern "C" DISCORD_EXPORT void Discord_Initialize(const char *applicationId,
+    DiscordEventHandlers * handlers,
     int autoRegister,
-    const char* optionalSteamId)
+    const char *optionalSteamId)
 {
     IoThread = new (std::nothrow) IoThreadHolder();
     if (IoThread == nullptr)
@@ -349,7 +349,7 @@ extern "C" DISCORD_EXPORT void Discord_Initialize(const char* applicationId,
     }
 
     Connection = RpcConnection::Create(applicationId);
-    Connection->onConnect = [](JsonDocument& readyMessage)
+    Connection->onConnect = [](JsonDocument &readyMessage)
     {
         Discord_UpdateHandlers(&QueuedHandlers);
         if (QueuedPresence.length > 0)
@@ -383,7 +383,7 @@ extern "C" DISCORD_EXPORT void Discord_Initialize(const char* applicationId,
         WasJustConnected.exchange(true);
         ReconnectTimeMs.reset();
     };
-    Connection->onDisconnect = [](int err, const char* message)
+    Connection->onDisconnect = [](int err, const char *message)
     {
         LastDisconnectErrorCode = err;
         StringCopy(LastDisconnectErrorMessage, message);
@@ -415,7 +415,7 @@ extern "C" DISCORD_EXPORT void Discord_Shutdown(void)
     RpcConnection::Destroy(Connection);
 }
 
-extern "C" DISCORD_EXPORT void Discord_UpdatePresence(const DiscordRichPresence* presence)
+extern "C" DISCORD_EXPORT void Discord_UpdatePresence(const DiscordRichPresence * presence)
 {
     {
         std::lock_guard<std::mutex> guard(PresenceMutex);
@@ -431,7 +431,7 @@ extern "C" DISCORD_EXPORT void Discord_ClearPresence(void)
     Discord_UpdatePresence(nullptr);
 }
 
-extern "C" DISCORD_EXPORT void Discord_Respond(const char* userId, /* DISCORD_REPLY_ */ int reply)
+extern "C" DISCORD_EXPORT void Discord_Respond(const char *userId, /* DISCORD_REPLY_ */ int reply)
 {
     // if we are not connected, let's not batch up stale messages for later
     if (!Connection || !Connection->IsOpen())
@@ -542,7 +542,7 @@ extern "C" DISCORD_EXPORT void Discord_RunCallbacks(void)
     }
 }
 
-extern "C" DISCORD_EXPORT void Discord_UpdateHandlers(DiscordEventHandlers* newHandlers)
+extern "C" DISCORD_EXPORT void Discord_UpdateHandlers(DiscordEventHandlers * newHandlers)
 {
     if (newHandlers)
     {

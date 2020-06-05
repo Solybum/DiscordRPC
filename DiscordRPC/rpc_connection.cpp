@@ -22,45 +22,36 @@ static RpcConnection Instance;
 
 void RpcConnection::Open()
 {
-    if (state == State::Connected)
-    {
+    if (state == State::Connected) {
         return;
     }
 
-    if (state == State::Disconnected && !connection->Open())
-    {
+    if (state == State::Disconnected && !connection->Open()) {
         return;
     }
 
-    if (state == State::SentHandshake)
-    {
+    if (state == State::SentHandshake) {
         JsonDocument message;
-        if (Read(message))
-        {
+        if (Read(message)) {
             auto cmd = GetStrMember(&message, "cmd");
             auto evt = GetStrMember(&message, "evt");
-            if (cmd && evt && !strcmp(cmd, "DISPATCH") && !strcmp(evt, "READY"))
-            {
+            if (cmd && evt && !strcmp(cmd, "DISPATCH") && !strcmp(evt, "READY")) {
                 state = State::Connected;
-                if (onConnect)
-                {
+                if (onConnect) {
                     onConnect(message);
                 }
             }
         }
     }
-    else
-    {
+    else {
         sendFrame.opcode = Opcode::Handshake;
         sendFrame.length = (uint32_t)JsonWriteHandshakeObj(
-            sendFrame.message, sizeof(sendFrame.message), RpcVersion, appId);
+          sendFrame.message, sizeof(sendFrame.message), RpcVersion, appId);
 
-        if (connection->Write(&sendFrame, sizeof(MessageFrameHeader) + sendFrame.length))
-        {
+        if (connection->Write(&sendFrame, sizeof(MessageFrameHeader) + sendFrame.length)) {
             state = State::SentHandshake;
         }
-        else
-        {
+        else {
             Close();
         }
     }
@@ -68,8 +59,7 @@ void RpcConnection::Open()
 
 void RpcConnection::Close()
 {
-    if (onDisconnect && (state == State::Connected || state == State::SentHandshake))
-    {
+    if (onDisconnect && (state == State::Connected || state == State::SentHandshake)) {
         onDisconnect(lastErrorCode, lastErrorMessage);
     }
     connection->Close();
@@ -81,8 +71,7 @@ bool RpcConnection::Write(const void* data, size_t length)
     sendFrame.opcode = Opcode::Frame;
     memcpy(sendFrame.message, data, length);
     sendFrame.length = (uint32_t)length;
-    if (!connection->Write(&sendFrame, sizeof(MessageFrameHeader) + length))
-    {
+    if (!connection->Write(&sendFrame, sizeof(MessageFrameHeader) + length)) {
         Close();
         return false;
     }
@@ -91,18 +80,14 @@ bool RpcConnection::Write(const void* data, size_t length)
 
 bool RpcConnection::Read(JsonDocument& message)
 {
-    if (state != State::Connected && state != State::SentHandshake)
-    {
+    if (state != State::Connected && state != State::SentHandshake) {
         return false;
     }
     MessageFrame readFrame;
-    for (;;)
-    {
+    for (;;) {
         bool didRead = connection->Read(&readFrame, sizeof(MessageFrameHeader));
-        if (!didRead)
-        {
-            if (!connection->isOpen)
-            {
+        if (!didRead) {
+            if (!connection->isOpen) {
                 lastErrorCode = (int)ErrorCode::PipeClosed;
                 StringCopy(lastErrorMessage, "Pipe closed");
                 Close();
@@ -110,11 +95,9 @@ bool RpcConnection::Read(JsonDocument& message)
             return false;
         }
 
-        if (readFrame.length > 0)
-        {
+        if (readFrame.length > 0) {
             didRead = connection->Read(readFrame.message, readFrame.length);
-            if (!didRead)
-            {
+            if (!didRead) {
                 lastErrorCode = (int)ErrorCode::ReadCorrupt;
                 StringCopy(lastErrorMessage, "Partial data in frame");
                 Close();
@@ -123,30 +106,27 @@ bool RpcConnection::Read(JsonDocument& message)
             readFrame.message[readFrame.length] = 0;
         }
 
-        switch (readFrame.opcode)
-        {
-            case Opcode::Close:
-            {
-                message.ParseInsitu(readFrame.message);
-                lastErrorCode = GetIntMember(&message, "code");
-                StringCopy(lastErrorMessage, GetStrMember(&message, "message", ""));
-                Close();
-                return false;
-            }
-            case Opcode::Frame:
+        switch (readFrame.opcode) {
+        case Opcode::Close: {
+            message.ParseInsitu(readFrame.message);
+            lastErrorCode = GetIntMember(&message, "code");
+            StringCopy(lastErrorMessage, GetStrMember(&message, "message", ""));
+            Close();
+            return false;
+        }
+        case Opcode::Frame:
             message.ParseInsitu(readFrame.message);
             return true;
-            case Opcode::Ping:
+        case Opcode::Ping:
             readFrame.opcode = Opcode::Pong;
-            if (!connection->Write(&readFrame, sizeof(MessageFrameHeader) + readFrame.length))
-            {
+            if (!connection->Write(&readFrame, sizeof(MessageFrameHeader) + readFrame.length)) {
                 Close();
             }
             break;
-            case Opcode::Pong:
+        case Opcode::Pong:
             break;
-            case Opcode::Handshake:
-            default:
+        case Opcode::Handshake:
+        default:
             // something bad happened
             lastErrorCode = (int)ErrorCode::ReadCorrupt;
             StringCopy(lastErrorMessage, "Bad ipc frame");
